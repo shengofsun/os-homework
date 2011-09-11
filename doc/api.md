@@ -28,7 +28,7 @@
   void fs_closefs(fs*);
   int& fs_errno(fs*);
   
-  int fs_pwd(fs*, char * buf, size_t buf_len);
+  void fs_pwd(fs*, char * buf, size_t buf_len);
   int fs_chdir(fs*, const char*);
   enum FS_FMODE {
       FS_READ = 1,

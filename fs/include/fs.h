@@ -29,7 +29,7 @@ fs * fs_creatfs(const char * fname, int block_num, int inode_num);
 fs * fs_openfs(const char* fname);
 void fs_closefs(fs*);
 int fs_errno(fs*);
-int fs_pwd(fs*, char * buf, size_t buf_len);
+void fs_pwd(fs*, char * buf, size_t buf_len);
 int fs_chdir(fs*, const char* dir);
 int fs_open(fs*, const char* fname, int mode);
 void fs_close(fs*, int fd);
