@@ -1,5 +1,8 @@
 #include <string.h>
 #include <stdio.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <dirent.h>
 #include "../fs/include/fs.h"
 
 fs* filesys;
@@ -8,14 +11,16 @@ char cmdline[1000];
 static void ls_this_dir(const char* dir_name, int hidden)
 {
     static char entry[1000];
-    
-    printf("%s\n", dir_name);
     fs_dir* fd = fs_opendir(filesys, dir_name);
     
-    while ( fs_nextent(fd, entry, 999)!=-1 )
+    printf("%s\n", dir_name);
+    
+    while ( fs_nextent(fd, entry, 999) )
     {
-        printf("%s\n", entry);
+        if ( hidden==0 || entry[0]!='.' )
+            printf("%s\n", entry);
     }
+    
     printf("\n");
 
     fs_closedir(fd);
@@ -23,7 +28,7 @@ static void ls_this_dir(const char* dir_name, int hidden)
 
 void ls(char* params[], int p_cnt)
 {
-    int hidden = -1, i;
+    int hidden = 0, i;
     char* dir==NULL;
     int dir_cnt = 0;
     
@@ -34,7 +39,7 @@ void ls(char* params[], int p_cnt)
     for (i=0; i<p_cnt; i++)
     {
         if ( params[i][0]!='-' ){
-            ls_this_dir(params[i]);
+            ls_this_dir(params[i], hidden);
             dir_cnt ++;
         }
     }
@@ -47,7 +52,7 @@ void ls(char* params[], int p_cnt)
         else
         {
             fs_pwd(filesys, dir, 1000);
-            ls_this_dir(dir);
+            ls_this_dir(dir, hidden);
             free(dir);
         }
     }
@@ -71,9 +76,12 @@ void mkdir(char* params[], int len)
 
 static void remove_entry(const char* path)
 {
+    static char entry[1000];
+    
     int fd = fs_open(filesys, path, 0);
     inode ibuffer;
-
+    fs_dir* fdir;
+    
     if ( fd==-1 ){
         printf("error occured.\n");
         return;
@@ -85,9 +93,18 @@ static void remove_entry(const char* path)
         return;
     }
 
-    if ( ibuffer.mode == 0 )
-    {
-        
+    if ( ibuffer.mode&1 == 0 )
+        fs_remove(filesys, path);
+    else {
+        fs_close(filesys, fd);
+        fdir = fs_opendir(filesys, path);
+        while ( fs_nextent(fdir, entry, 999) )
+        {
+            if ( strcmp(entry, ".")!=0 && strcmp(entry, "..")!=0 )
+                remove_entry(entry);
+        }
+        fs_close(fs, fdir);
+        fs_removedir(fs, path);
     }
 }
 
@@ -100,6 +117,98 @@ void rm(char* params[], int len)
     for (; i<len; i++)
     {
         remove_entry(parmas[i]);
+    }
+}
+
+typedef union{
+    stat st_bf;
+    inode st_ibuffer;
+}status;
+
+typedef union{
+    DIR* dir;
+    fs_dir* fs_d;
+}sh_dir;
+
+static int sh_readdir(sh_dir* dp, char* buf, int len, int check)
+{
+    dirent* dr;
+    
+    if ( check )
+    {
+        dr = readdir(dp->dir);
+        if ( dr!=NULL ){
+            strcpy(buf, dr->);
+        }
+    }
+}
+
+static int sh_stat(const char* pathname, status* st, int check)
+{
+    int fd, r;
+    if ( check )
+        return stat(pathname, st->st_bf);
+    else{
+        if ( (fd=fs_open(pathname, pathname, 0))==-1)
+            return -1;
+        r = fs_fstat(fd, st->st_ibuffer);
+        fclose(fd);
+        return r;
+    }
+}
+
+static int is_dir(status* st, int check)
+{
+    if (check)
+        return S_ISDIR(st->st_bf.st_mode);
+    else return st->st_ibuffer.mode&1
+}
+
+static int sh_chdir(const char* pathname, int check)
+{
+    if ( check )
+        return chdir(pathname);
+    else return fs_chdir(pathname);
+}
+
+static int is_local(const char* f)
+{
+    static const char* local = "local:";
+    while (*f && *local && *f==*local ){f++; local++;}
+    return *local==0;
+}
+
+static void copy(const char* dst, const src, int d_local, int s_local)
+{
+    status st_dst, st_src;
+    if ( shell_stat(src, st_src)==-1 )
+    {
+        printf("Error occured.\n");
+        return;
+    }
+    if ( shell_stat(dst, st_dst)!=-1 )
+    {
+        
+    }
+    
+    if ( isdir(st, s_local) )
+    {
+        
+    }
+}
+
+void scp(char* params[], int len)
+{
+    int dst_ck, src_ck;
+    if ( len != 2 ) help("scp");
+    else {
+        dst_ck = is_local(params[0]);
+        src_ck = is_local(params[1]);
+        if ( dst_ck==1 ) params[0]+=6;
+        if ( src_ck==1 ) params[1]+=6;
+
+        
+        copy(params[0], params[1], dst_ck, src_ck);
     }
 }
 
