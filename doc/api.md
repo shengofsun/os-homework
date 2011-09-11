@@ -8,7 +8,7 @@
       time_t create_time;
       time_t modify_time;
       int mode;
-            int block_id[8];
+      int block_id[8];
       unsigned int size;
       int next_id;
       int ref_count;

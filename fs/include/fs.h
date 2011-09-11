@@ -1,9 +1,13 @@
 #ifndef FS_H_INCLUDED_
 #define FS_H_INCLUDED_
 
+#ifndef size_t
+typedef  unsigned int size_t;
+#endif
+
 typedef struct inode_ {
-    time_t create_time;
-    time_t modify_time;
+    int create_time;
+    int modify_time;
     int mode;
     int block_id[8];
     unsigned int size;
@@ -21,10 +25,10 @@ enum FS_FMODE {
     FS_EXSIT = 8
 };
 
-fs * fs_creatfs(const char * fname, int size, int inode_num = -1);
+fs * fs_creatfs(const char * fname, int block_num, int inode_num);
 fs * fs_openfs(const char* fname);
 void fs_closefs(fs*);
-int& fs_errno(fs*);
+int fs_errno(fs*);
 int fs_pwd(fs*, char * buf, size_t buf_len);
 int fs_chdir(fs*, const char* dir);
 int fs_open(fs*, const char* fname, int mode);
