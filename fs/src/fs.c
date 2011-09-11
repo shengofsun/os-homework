@@ -10,6 +10,7 @@ static const char magic[] = "\0221\0124f";
 #define inodect (blocksz/64)
 #define FREE_BLOCK_NUM 500
 #define MAX_PATH_LEN 252
+#define MAX_FNAME_LEN 124
 
 typedef struct superblock_ {
     char magic_number[4];
@@ -24,6 +25,7 @@ typedef struct superblock_ {
 typedef struct fdesc_ {
     int inodeid;
     int mode;
+    int used;
     unsigned int offset;
 } fdesc;
 
@@ -41,7 +43,7 @@ struct fs_ {
     fdesc fds[MAX_FD];
     FILE * fp;
     buffer buf[16];
-    char cdir[MAX_PATH_LEN];
+    char cdir[MAX_PATH_LEN * 2];
     int dno;
 };
 
@@ -50,9 +52,22 @@ struct fs_dir_ {
     int cur_off;
 };
 
+typedef struct dentry {
+    char fname[MAX_FNAME_LEN];
+    int inode;
+} dentry;
+
 static int writeblk(fs * f, int bid) {
     fseek(f->fp, f->sb.block_offset + bid * blocksz, SEEK_SET);
     return fwrite(f->buf[bid].d, blocksz, 1, f->fp);
+}
+
+static int pwd_gen(fs * f, char* buf, size_t buf_len) {
+    if (f->dno == 0) {
+        buf[0] = '/';
+        return 1;
+    }
+    
 }
 
 static buffer* openblk(fs * f, int bid) {
@@ -107,6 +122,14 @@ static fs * new_fs() {
     return f;
 }
 
+static void add_entry(fs * f, int to, const char* str, int id) {
+    dentry ent;
+    strcpy(ent.fname, str);
+    ent.inode = id;
+    writei(to, f->inodes[to].dcnt * sizeof(dentry), &ent, sizeof(ent));
+    ++f->inodes[to].dcnt;
+}
+
 static int init_super_block(fs * f, int nblk, int ninode) {
     superblock * sb;
     int i;
@@ -124,6 +147,10 @@ static int init_super_block(fs * f, int nblk, int ninode) {
     sb->free_inode = 1;
     for (i = 2; i < ninode; ++i)
         f->inodes[i-1].next_id = i;
+    // init root dir:
+    f->inodes[0].ref_count = 255;
+    add_entry(f, 0, ".", 0);
+    add_entry(f, 0, "..", 0);
         
     // 3. init blk
     ret = 1;
@@ -133,6 +160,27 @@ static int init_super_block(fs * f, int nblk, int ninode) {
     for (i = 0; ret == 1 && i < nblk; ++i)
         ret = free_blk(f, i);
     return ret;
+}
+
+static void format_path(char *buf) {
+
+}
+
+static fs_dir* opendiri(int inode) {
+}
+
+static int findindir(fs *f, int inode, const char * entname) {
+    fs_dir * dir = opendiri(inode);
+    dentry ent;
+    while (nextent(dir, &ent)) {
+        if (strcmp(ent.fname, entname) == 0) {
+            return ent.inode;
+        }
+    }
+    return -1;
+}
+
+static int openi(fs* f, const char* path) {
 }
 
 fs * fs_creatfs(const char* fname, int block_num, int inode_num) {
@@ -209,23 +257,42 @@ int fs_errno(fs* f) {
 
 void fs_pwd(fs* f, char* buf, size_t buf_len) {
     int len = strlen(f->cdir);
-    if (len < buf_len)
-        strcpy(buf, f->cdir);
-    else
-        memcpy(buf, f->cdir, buf_len - 1);
-    buf[buf_len-1] = 0;
+    if (buf_len < len) len = buf_len;
+    memcpy(buf, f->cdir, len);
 }
 
-int fs_chdir(fs* f, char* buf, size_t buf_len) {
-
+int fs_chdir(fs* f, const char* dir) {
+    char buf[MAX_PATH_LEN * 2];
+    if (dir[0] == '/')
+        strcpy(buf, dir);
+    else
+        sprintf("%s/%s", f->cdir, dir);
+    format_path(buf);
+    int dn = openi(f, buf);
+    if (dn == -1 || ((f->inodes[dn].mode & 1) == 0)) return -1;
+    f->dno = dn;
+    strcpy(f->cdir, buf);    
 }
 
 int fs_open(fs* f, const char* fname, int mode) {
+    int i;
+    int k = -1;
+    if ((mode & FS_WRITE) == 0)
+        mode |= FS_EXSIT;
+    for (i = 0; i < MAX_FD; ++i)
+        if (f->fds[i].used == 0) {
+            k = i;
+            break;
+        }
 
+    return k;
 }
 
 void fs_close(fs* f, int fd) {
-
+    if (fd < 0 || fd >= MAX_FD) {
+        return ;
+    }
+    f->fds[fd].used = 0;
 }
 
 int fs_read(fs* f, int fd, void* buf, size_t size) {

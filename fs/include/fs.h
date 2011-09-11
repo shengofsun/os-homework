@@ -6,11 +6,10 @@ typedef  unsigned int size_t;
 #endif
 
 typedef struct inode_ {
-    int create_time;
-    int modify_time;
     int mode;
     int block_id[8];
     unsigned int size;
+    unsigned int dcnt;
     int next_id;
     int ref_count;
 } inode;
@@ -40,6 +39,7 @@ unsigned int fs_tell(fs*, int fd);
 int fs_eof(fs*, int fd);
 int fs_fstat(fs*, int fd, inode* inode);
 int fs_remove(fs*, const char* path);
+int fs_mkdir(fs*, const char* path);
 int fs_removedir(fs*, const char* dir);
 fs_dir * fs_opendir(fs*, const char* dir);
 int fs_nextent(fs_dir*, char* buf, size_t buf_len);
