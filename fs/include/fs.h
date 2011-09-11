@@ -24,6 +24,12 @@ enum FS_FMODE {
     FS_EXSIT = 8
 };
 
+enum FS_FPOS{
+	FS_SET = 0,
+	FS_CUR = 1,
+	FS_END = 2
+};
+
 fs * fs_creatfs(const char * fname, int block_num, int inode_num);
 fs * fs_openfs(const char* fname);
 void fs_closefs(fs*);
@@ -33,7 +39,7 @@ int fs_chdir(fs*, const char* dir);
 int fs_open(fs*, const char* fname, int mode);
 void fs_close(fs*, int fd);
 int fs_read(fs*, int fd, void* buf, size_t size);
-int fs_write(fs*, int fd, void* buf, size_t size);
+int fs_write(fs*, int fd, const void* buf, size_t size);
 int fs_seek(fs*, int fd, int offset, int mode);
 unsigned int fs_tell(fs*, int fd);
 int fs_eof(fs*, int fd);

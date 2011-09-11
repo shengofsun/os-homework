@@ -48,7 +48,7 @@ struct fs_ {
 };
 
 struct fs_dir_ {
-    int fd;
+    int inode;
     int cur_off;
 };
 
@@ -122,11 +122,20 @@ static fs * new_fs() {
     return f;
 }
 
+static int writei(fs *f, int inode, int off,  const void* ptr, int size){
+
+	return 0;
+}
+
+static int readi(fs *f, int inode, int off, void* ptr, int size){
+	return 0;
+}
+
 static void add_entry(fs * f, int to, const char* str, int id) {
     dentry ent;
     strcpy(ent.fname, str);
     ent.inode = id;
-    writei(to, f->inodes[to].dcnt * sizeof(dentry), &ent, sizeof(ent));
+//    writei(to, f->inodes[to].dcnt * sizeof(dentry), &ent, sizeof(ent));
     ++f->inodes[to].dcnt;
 }
 
@@ -166,13 +175,24 @@ static void format_path(char *buf) {
 
 }
 
-static fs_dir* opendiri(int inode) {
+static fs_dir* opendiri(fs *f,  int inode) {
+	if (!(f->inodes[inode].mode&1)) return 0;
+	fs_dir* ret = malloc(sizeof(fs_dir));
+	ret->cur_off = 0;
+	ret->inode = inode;
+	return ret;
+}
+
+static int nextent(fs *f, fs_dir* dir, dentry *ent){
+	if (f->inodes[dir->inode].dcnt >= dir->cur_off) return -1;
+	readi(f, dir->inode, sizeof(dentry)*dir->cur_off, dir, sizeof(dentry));
+	return 0;
 }
 
 static int findindir(fs *f, int inode, const char * entname) {
-    fs_dir * dir = opendiri(inode);
+    fs_dir * dir = opendiri(f, inode);
     dentry ent;
-    while (nextent(dir, &ent)) {
+    while (!nextent(f, dir, &ent)) {
         if (strcmp(ent.fname, entname) == 0) {
             return ent.inode;
         }
@@ -296,27 +316,39 @@ void fs_close(fs* f, int fd) {
 }
 
 int fs_read(fs* f, int fd, void* buf, size_t size) {
-
+	if (!f->fds[fd].used) return -1;
+	return readi(f, f->fds[fd].inodeid, f->fds[fd].offset, buf, size);
 }
 
-int fs_write(fs* f, int fd, void* buf, size_t size) {
-
+int fs_write(fs* f, int fd, const void* buf, size_t size) {
+	if (!f->fds[fd].used) return -1;
+	return writei(f, f->fds[fd].inodeid, f->fds[fd].offset, buf, size);
 }
 
 int fs_seek(fs* f, int fd, int offset, int mode) {
-
+	if (!f->fds[fd].used) return -1;
+	int off = f->fds[fd].offset, size = f->inodes[f->fds[fd].inodeid].size;
+	if (mode == FS_SET) off = offset;
+	else if (mode == FS_END) off = size + offset - 1;
+	else if (mode == FS_CUR) off += offset;
+	else return -1;
+	return off < 0 || off >= size ? -1 : 0;
 }
 
 unsigned int fs_tell(fs* f, int fd) {
-
+	if (!f->fds[fd].used) return -1;
+	return f->fds[fd].offset;
 }
 
 int fs_eof(fs* f, int fd) {
-
+	if (!f->fds[fd].used) return -1;
+	return f->fds[fd].offset == f->inodes[f->fds[fd].inodeid].size - 1;
 }
 
 int fs_fstat(fs* f, int fd, inode* inode) {
-
+	if (!f->fds[fd].used) return -1;
+	memcpy(inode, &f->inodes[f->fds[fd].inodeid], sizeof(*inode));
+	return 0;
 }
 
 int fs_remove(fs* f, const char* path) {
@@ -343,3 +375,6 @@ int fs_link(fs* f, const char* src, const char* dst) {
 
 }
 
+int main(){
+	return 0;
+}
