@@ -594,11 +594,6 @@ void fs_closedir(fs_dir* dir) {
  
 }
 
-int fs_link(fs* f, const char* src, const char* dst) {
-
-}
-
-
 int main(){
     return 0;
 }
