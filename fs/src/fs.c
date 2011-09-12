@@ -49,6 +49,7 @@ struct fs_ {
 };
 
 struct fs_dir_ {
+    fs * f;
     int inode;
     int cur_off;
 };
@@ -575,23 +576,42 @@ int fs_fstat(fs* f, int fd, inode* inode) {
 }
 
 int fs_remove(fs* f, const char* path) {
-
+    
 }
 
 int fs_removedir(fs* f, const char* dir) {
-
+    
 }
 
 fs_dir * fs_opendir(fs* f, const char* dir) {
-
+    fs_dir * dir = malloc(sizeof(*dir));
+    dir->inode = openi(f, dir, 0);
+    if (dir->inode == -1) {
+        free(dir);
+        return NULL;
+    }
+    dir->f = f;
+    dir->cur_off;
+    return dir;
 }
 
 int fs_nextent(fs_dir* dir, char* buf, size_t buf_len) {
-
+    fs * f = dir->f;
+    dentry ent;
+    int len;
+    if (dir->cur_off >= f->inodes[dir->inode].dentry * sizeof(dentry)) { 
+        return 0;
+    }
+    readi(*f, dir->inode, dir->cur_off, &ent, sizeof(ent));
+    len = strlen(ent.fname);
+    if (buf_len < len) len = buf_len;
+    memcpy(buf, ent.fname, len - 1);
+    buf[len-1] = '\0';
+    return 1;
 }
 
 void fs_closedir(fs_dir* dir) {
- 
+    free(dir);
 }
 
 int main(){
