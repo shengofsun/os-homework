@@ -1,4 +1,4 @@
-#include "fs.h"
+#include "../include/fs.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -327,7 +327,60 @@ static int findindir(fs *f, int inode, const char * entname) {
     return -1;
 }
 
-static int openi(fs* f, const char* path) {
+static int split_dir(const char* path, const char* p[])
+{
+    int off = 0;
+
+    if ( *path==0 ) return off;
+    
+    p[off++]=path;
+    while (*path) {
+        if (*path=='/') {
+            p[off++]=path+1;
+            *path=0;
+        }
+        path++;
+    }
+    return off;
+}
+
+static int openi(fs* f, const char* path, int create_flag)
+{
+    fs_dir* dir;
+    dentry entry;
+    char full_path[500];
+    char* p[50];
+    sprintf(full_path, "%s/%s", f->cdir, path);
+    format(full_path);
+
+    int count = split_dir(full_path+1, p);
+    int this_inode = 0, offset, i=0, bytes_get, father_inode;
+
+    if ( count<=0 ) return -1;
+    
+    while ( i<count )
+    {
+        offset = 0;
+        while ( (bytes_get = readi(f, this_inode, offset, &entry, sizeof(entry))) )
+            if ( strcmp(p[i], entry.fname)==0 ) break;
+        if (bytes_get>0){
+            father_inode = this_inode;
+            this_inode = entry.inode;
+            i++;
+        }
+        else break;
+    }
+    if ( i>=count ) return this_inode;
+    if ( i+1>=count && create_flag ){
+        i = f->sb.free_inode; 
+        if ( i==0 ) return -1;
+        else {
+            f->sb.free_inode = f->inodes[i].next_id;
+            add_entry(f, father_inode, p[count-1], i);
+            return i;
+        }
+    }
+    return -1;
 }
 
 fs * fs_creatfs(const char* fname, int block_num, int inode_num) {
