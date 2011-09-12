@@ -121,6 +121,31 @@ static int free_blk(fs * f, int bid) {
     return 1;
 }
 
+static void release_inode_blk(fs * f, int ino) {
+    int i;
+    inode * in;
+    in= &f->inodes[ino];
+    if (in->mode & 2) {
+        for (i = 0; i < 8; ++i)
+            if (in->block_id[i] > 0) {
+                buffer * b = openblk(f, in->block_id[i]);
+                b->free = 0;
+                int * begin = (int*) b->d;
+                int * end = (int*) (b->d + blocksz);
+                for (; begin < end; ++begin)
+                    if (*begin > 0)
+                        free_blk(f, *begin);
+                b->free = 1;
+                free_blk(f, in->block_id[i]);
+            }
+    }
+    else {
+        for (i = 0; i < 8; ++i)
+            if (in->block_id[i] > 0)
+                free_blk(f, in->block_id[i]);
+    }
+}
+
 static int creatfile(fs * f, const char * fname) {
     return openi(f, fname, 1);
 }
@@ -132,7 +157,8 @@ static fs * new_fs() {
     memset(f->fds, 0, sizeof(f->fds));
     f->errno_ = 0;
     for (i = 0; i < 16; ++i) {
-        f->buf[i].dirty = f->buf[i].free = 0;
+        f->buf[i].dirty = 0;
+        f->buf[i].free = 1;
         f->buf[i].bid = -1;
     }
     f->dno = 1;
@@ -576,11 +602,33 @@ int fs_fstat(fs* f, int fd, inode* inode) {
 }
 
 int fs_remove(fs* f, const char* path) {
-    
+    int ino;
+    int fno;
+    ino = openi(f, path, 0);
+    if (ino == -1 || (f->inodes[ino].mode & 1) == 1) {
+        return -1;
+    }
+    fno = openi(f, path, 2);
+    if (fno == -1) return -1;
+    release_inode_blk(f, ino);
+    remove_entry(f, fno, ino);
+    return 0;
 }
 
 int fs_removedir(fs* f, const char* dir) {
-    
+    int ino;
+    int fno;
+    ino = openi(f, path, 0);
+    if (ino == -1 || 
+        (f->inodes[ino].mode & 1) == 0 ||
+        f->inodes[ino].dcnt > 0) {
+        return -1;
+    }
+    fno = openi(f, path, 2);
+    if (fno == -1) return -1;
+    release_inode_blk(f, ino);
+    remove_entry(f, fno, ino);
+    return 0;
 }
 
 fs_dir * fs_opendir(fs* f, const char* dir) {
