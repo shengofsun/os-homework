@@ -279,18 +279,20 @@ static int openi(fs* f, const char* path, int create_flag)
     if ( count<=0 ) return -1;
     
     while ( i<count )
-        {
-            offset = 0;
-            while ( (bytes_get = readi(f, this_inode, offset, &entry, sizeof(entry))) )
-                if ( strcmp(p[i], entry.fname)==0 ) break;
-            if (bytes_get>0){
-                father_inode = this_inode;
-                this_inode = entry.inode;
-                i++;
-            }
-            else break;
+    {
+        offset = 0;
+        while ( (bytes_get = readi(f, this_inode, offset, &entry, sizeof(entry))) )
+            if ( strcmp(p[i], entry.fname)==0 ) break;
+        if (bytes_get>0){
+            father_inode = this_inode;
+            this_inode = entry.inode;
+            i++;
         }
-    if ( i>=count ) return this_inode;
+        else break;
+    }
+    if ( i>=count ) {
+        return (create_flag==2)?father_inode:this_inode;
+    }
     if ( i+1>=count && create_flag ){
         i = f->sb.free_inode; 
         if ( i==0 ) return -1;
@@ -353,7 +355,7 @@ static void format_path(char *buf)
     int i=0, state=0, backs=0, last=0;
     
     for (; buf[i] && buf[i]!='\n'; )
-        {
+    {
             switch ( buf[i] )
                 {
                 case '/':
@@ -404,6 +406,26 @@ static int findindir(fs *f, int inode, const char * entname) {
         }
     }
     return -1;
+}
+
+static void remove_entry(fs* f, int father_inode, int son_inode)
+{
+    dentry entry;
+    int offset = 0, bytes_get;
+    while ( bytes_get = readi(f, father_inode, offset, &entry, sizeof(entry)) ){
+        if ( entry.inode == son_inode )
+            break;
+        offset += sizeof(entry);
+    }
+    if ( bytes_get > 0 )
+    {
+        readi(f, father_inode, sizeof(entry)*(f->inodes[father_inode].dcnt-1), &entry, sizeof(entry) );
+        writei(f, father_inode, offset, &entry, sizeof(entry) );
+        f->inodes[father_inode].dcnt--;
+
+        f->inodes[son_inode].next_id  = f->sb.free_inode;
+        f->sb.free_inode = son_inode;
+    }
 }
 
 fs * fs_creatfs(const char* fname, int block_num, int inode_num) {
