@@ -63,14 +63,6 @@ static int writeblk(fs * f, int bid) {
     return fwrite(f->buf[bid].d, blocksz, 1, f->fp);
 }
 
-static int pwd_gen(fs * f, char* buf, size_t buf_len) {
-    if (f->dno == 0) {
-        buf[0] = '/';
-        return 1;
-    }
-    
-}
-
 static buffer* openblk(fs * f, int bid) {
     int i;
     int k;
@@ -439,7 +431,16 @@ int fs_open(fs* f, const char* fname, int mode) {
             k = i;
             break;
         }
-
+    if (k != -1) {
+        f->fds[k].inodeid = openi(f, fname);
+        if (f->fds[k].inodeid == -1) {
+            return -1;
+        }
+        f->fds[k].used = 1;
+        f->fds[k].mode = (mode & (FS_READ | FS_WRITE));
+        f->fds[k].offset = ;
+        
+    }
     return k;
 }
 
