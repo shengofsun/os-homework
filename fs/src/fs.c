@@ -11,6 +11,7 @@ static const char magic[] = "\0221\0124f";
 #define FREE_BLOCK_NUM 500
 #define MAX_PATH_LEN 252
 #define MAX_FNAME_LEN 124
+#define MAX_FILE_SIZE (8*blocksz/sizeof(int)*blocksz)
 
 typedef struct superblock_ {
     char magic_number[4];
@@ -90,6 +91,10 @@ static buffer* openblk(fs * f, int bid) {
     return &f->buf[k];
 }
 
+static int alloc_blk(fs *f){
+	return 0;
+}
+
 static int free_blk(fs * f, int bid) {
     ++ f->sb.total_free_block_num;
     if (f->sb.block_cnt == FREE_BLOCK_NUM) {
@@ -122,12 +127,69 @@ static fs * new_fs() {
     return f;
 }
 
-static int writei(fs *f, int inode, int off,  const void* ptr, int size){
+static int bmap(fs *f, int ip, int bn){
+	const int ic = blocksz/sizeof(int);
+	if (bn < 0 || bn >= ic*8) return -1;
+	inode* inode = &f->inodes[ip];
+	if (!(inode->mode&2) && bn > 8) {
+		buffer *bp = openblk(f, alloc_blk(f));
+		memset(bp->d, 0, sizeof(bp->d));
+		bp->dirty = 1;
+		memcpy(bp->d, inode->block_id, sizeof(inode->block_id));
+		memset(inode->block_id, 0, sizeof(inode->block_id));
+		inode->block_id[0] = bp->bid;
+		inode->mode |= 2;
+	}
+	if (!(inode->mode&2)) return inode->block_id[bn] ?
+			inode->block_id[bn] :
+			(inode->block_id[bn]=alloc_blk(f));
 
-	return 0;
+	buffer* bp = openblk(f, bn/ic);
+	int *ptr = bp->d;
+	if (!ptr[bn%ic]){
+		bp->dirty = 1;
+		ptr[bn%ic] = alloc_blk(f);
+	}
+	return ptr[bn%ic];
 }
 
-static int readi(fs *f, int inode, int off, void* ptr, int size){
+
+static int writei(fs *f, int ip, int off, const void* ptr, int size){
+	if (size == 0) return 0;
+	if (size < 0 || size + off >= MAX_FILE_SIZE) return -1;
+	int ret = size;
+	const char* src = ptr;
+	if (off % blocksz){
+		buffer* bp = openblk(f, bmap(f, ip, off/blocksz));
+		bp->dirty = 1;
+		int t = blocksz - off % blocksz;
+		if (t > size) t = size;
+		memcpy(bp->d+off % blocksz, src, t);
+		size -= t;
+		src += t;
+		off += t;
+	}
+
+	while (size >= blocksz){
+		buffer* bp = openblk(f, bmap(f, ip, off/blocksz));
+		bp->dirty = 1;
+		memcpy(bp->d, src, blocksz);
+
+		off += blocksz;
+		src += blocksz;
+		size -= blocksz;
+	}
+
+	if (size){
+		buffer* bp = openblk(f, bmap(f, ip, off/blocksz));
+		bp->dirty = 1;
+		memcpy(bp->d, src, size);
+	}
+
+	return ret;
+}
+
+static int readi(fs *f, int ip, int off, void* ptr, int size){
 	return 0;
 }
 
@@ -416,6 +478,7 @@ void fs_closedir(fs_dir* dir) {
 int fs_link(fs* f, const char* src, const char* dst) {
 
 }
+
 
 int main(){
 	return 0;
