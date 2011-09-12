@@ -88,7 +88,6 @@ static buffer* openblk(fs * f, int bid) {
 static int alloc_blk(fs *f){
     int ret = -1;
     if (f->sb.total_free_block_num  == 0) return -1;
-    -- f->sb.total_free_block_num;
     -- f->sb.block_cnt;
     ret = f->sb.free_blocks[f->sb.block_cnt];
     if (f->sb.block_cnt == 0) {
@@ -100,6 +99,7 @@ static int alloc_blk(fs *f){
         memcpy(f->sb.free_blocks, b->d, sizeof(f->sb.free_blocks));
         f->sb.block_cnt = FREE_BLOCK_NUM;
     }
+    -- f->sb.total_free_block_num;
     return ret;
 }
 
@@ -246,7 +246,7 @@ static void add_entry(fs * f, int to, const char* str, int id) {
     ++f->inodes[to].dcnt;
 }
 
-static int split_dir(const char* path, const char* p[])
+static int split_dir(char* path, const char* p[])
 {
     int off = 0;
 
@@ -269,11 +269,12 @@ static int openi(fs* f, const char* path, int create_flag)
     dentry entry;
     char full_path[500];
     char* p[50];
-    sprintf(full_path, "%s/%s", f->cdir, path);
-    format(full_path);
 
     int count = split_dir(full_path+1, p);
     int this_inode = 0, offset, i=0, bytes_get, father_inode;
+
+    sprintf(full_path, "%s/%s", f->cdir, path);
+    format(full_path);
 
     if ( count<=0 ) return -1;
     
@@ -507,15 +508,14 @@ int fs_open(fs* f, const char* fname, int mode) {
             break;
         }
     if (k != -1) {
-        f->fds[k].inodeid = openi(f, fname);
+        f->fds[k].inodeid = openi(f, fname, 0);
         if (f->fds[k].inodeid == -1) {
             if (mode & FS_EXSIT) return -1;
         }
         else {
-            if ((mode & FS_APPEND) == 0) { // remove current file
+            if ((mode & FS_WRITE) && (mode & FS_APPEND) == 0) { // remove current file
                 f->fds[k].inodeid = -1;
-                removefile(fname);
-                return fs_open(f, fname, mode);
+                fs_remove(fs, fname);
             }
         }
 
