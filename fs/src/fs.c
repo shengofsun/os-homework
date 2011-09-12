@@ -88,7 +88,6 @@ static int alloc_blk(fs *f){
 }
 
 static int free_blk(fs * f, int bid) {
-    ++ f->sb.total_free_block_num;
     if (f->sb.block_cnt == FREE_BLOCK_NUM) {
         buffer * b = openblk(f, bid);
         if (b == NULL) {
@@ -100,6 +99,7 @@ static int free_blk(fs * f, int bid) {
     else {
         f->sb.free_blocks[f->sb.block_cnt++] = bid;
     }
+    ++ f->sb.total_free_block_num;        
     return 1;
 }
 
