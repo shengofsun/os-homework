@@ -103,6 +103,20 @@ static int free_blk(fs * f, int bid) {
     return 1;
 }
 
+static int creatfile(fs * f, const char * fname) {
+    char path[MAX_PATH_LEN];
+    char name[MAX_PATH_LEN];
+    int pr = -1;
+    int ino = -1;
+    int len = strlen(fname);
+    while (fname[len - 1] != '/') --len;
+    strcpy(name, fname + len);
+    memcpy(path, fname, len);
+    path[len] = '\0';
+    
+    return ino;
+}
+
 static fs * new_fs() {
     fs * f = malloc( sizeof (*f) );
     int i;
@@ -487,12 +501,25 @@ int fs_open(fs* f, const char* fname, int mode) {
     if (k != -1) {
         f->fds[k].inodeid = openi(f, fname);
         if (f->fds[k].inodeid == -1) {
-            return -1;
+            if (mode & FS_EXSIT) return -1;
         }
+        else {
+            if ((mode & FS_APPEND) == 0) { // remove current file
+                f->fds[k].inodeid = -1;
+                removefile(fname);
+                return fs_open(f, fname, mode);
+            }
+        }
+
+        if (f->fds[k].inodeid == -1) {
+            f->fds[k].inodeid = creatfile(f, fname);
+            if (f->fds[k].inodeid == -1)
+                return -1;
+        }
+        
         f->fds[k].used = 1;
         f->fds[k].mode = (mode & (FS_READ | FS_WRITE));
-        f->fds[k].offset = ;
-        
+        f->fds[k].offset = (mode & FS_APPEND) ? f->inodes[f->fds[k].inodeid].size: 0;
     }
     return k;
 }
