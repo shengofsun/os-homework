@@ -171,8 +171,50 @@ static int init_super_block(fs * f, int nblk, int ninode) {
     return ret;
 }
 
-static void format_path(char *buf) {
+static int backwards(const char* buf, int last, int cnt)
+{
+    if ( last<=0 ) return 0;
+    if ( buf[last]=='/'){
+        if ( cnt<=1 ) return last;
+        else
+            return backwards(buf, last-1, cnt-1);
+    }
+    return backwards(buf, last-1, cnt);
+}
+/*
+ *Convert from the relative path to absolute path.
+ * */
+static void format_path(char *buf)
+{
+    int i=0, state=0, backs=0, last=0;
+    
+    for (; buf[i] && buf[i]!='\n'; )
+    {
+        switch ( buf[i] )
+        {
+        case '/':
+            if ( state==0 )  buf[last++]=buf[i++];
+            else if ( state == 1 ) i++;
+            else if ( state == 2 ){
+                last = backwards(buf, last-1, backs);
+                buf[last++]=buf[i++];
+                backs=0;
+            }
+            state = 1;
+            break;
 
+        case '.':
+            if ( state == 0 ) buf[last++]=buf[i++];
+            else if ( state == 1 ){ state = 2; buf[last++]=buf[i++]; backs++; }
+            else if ( state==2 ) { buf[last++]=buf[i++]; backs++; }
+            break;
+        default:
+            if ( state==2 ) backs=0;
+            state = 0;
+            buf[last++]=buf[i++];
+        }
+    }
+    buf[last]=0;
 }
 
 static fs_dir* opendiri(fs *f,  int inode) {

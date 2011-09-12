@@ -1,12 +1,9 @@
 #include <string.h>
 #include <stdio.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <dirent.h>
 #include "../fs/include/fs.h"
 
 fs* filesys;
-char cmdline[1000];
+static char workdir[1000];
 
 static void ls_this_dir(const char* dir_name, int hidden)
 {
@@ -45,17 +42,7 @@ void ls(char* params[], int p_cnt)
     }
 
     if ( dir_cnt==0 )
-    {
-        dir = (char*)malloc(1005);
-        if ( !dir )
-            printf("allocate memory error\n");
-        else
-        {
-            fs_pwd(filesys, dir, 1000);
-            ls_this_dir(dir, hidden);
-            free(dir);
-        }
-    }
+        ls_this_dir(workdir);
 }
 
 void cd(char* params[], int len)
@@ -64,6 +51,15 @@ void cd(char* params[], int len)
     else {
         if ( fs_chdir(filesys, params[0]) == -1 )
             printf("error occured\n");
+    }
+    fs_pwd(filesys, workdir, 999);
+}
+
+void pwd(char* params[], int len)
+{
+    if (len!=0) help("pwd");
+    else{
+        printf("%s\n", workdir);
     }
 }
 
@@ -120,99 +116,121 @@ void rm(char* params[], int len)
     }
 }
 
-typedef union{
-    stat st_bf;
-    inode st_ibuffer;
-}status;
-
-typedef union{
-    DIR* dir;
-    fs_dir* fs_d;
-}sh_dir;
-
-static int sh_readdir(sh_dir* dp, char* buf, int len, int check)
+static int sh_stat(const char* pathname, inode *ibuffer)
 {
-    dirent* dr;
+    int r;
+    int fd = fs_open(filesys, pathname, 0);
+    if ( fd==-1 ) return -1;
+
+    r = fstat(fd, ibuffer);
+    fs_close(fd);
+    return r;
+}
+
+static int get_new_path(char* newp, const char* src, const char* dst)
+{
+    int len1 = strlen(dst), len2, i;
+    memcpy(newp, dst, len1);
+
+    for (i=0; src[i]; i++)
+        if ( src[i]=='/' )
+            len2=i;
+    memcpy(newp+len1, src+len2+1, i-len2-1);
+
+    return len1+i-len2-1;
+}
+
+void cp(char* params[], int len)
+{
+    int fd1, fd2, len;
+    inode ibuffer;
+
+    char* newp;
+    char* buf;
+    if ( len!= 2 ) { help("cp");return;}
+
+    if ( st_stat(params[0], &ibuffer)==-1 || ibuffer.imode&1 ) return;
+    if ( st_stat(params[1], &ibuffer )==-1 || ibuffer.imode&1==0 ) return;
+    if ( (fd1 = fs_open(params[0], FS_READ))==-1 ) return; 
     
-    if ( check )
-    {
-        dr = readdir(dp->dir);
-        if ( dr!=NULL ){
-            strcpy(buf, dr->);
-        }
-    }
+    newp = (char*)malloc(1000);
+    get_new_path(newp, parmas[0], params[1]);
+
+    if ( sh_stat(newp, &ibuffer)!=-1 ) goto error;
+    if ( (fd2=fs_open(newp, FS_READ|FS_WRITE))==-1 ) goto error;
+
+    char* buf = (char*)malloc(1000);
+    while ( len=fs_read(fs, fd1, buf, 1000) )
+        fs_write(fs, fd2, buf, len);
+
+    free(buf);
+    fs_close(fd2);
+error:
+    fs_close(fd1);
+    free(newp);
 }
 
-static int sh_stat(const char* pathname, status* st, int check)
+void get(char* params[], int len)
 {
-    int fd, r;
-    if ( check )
-        return stat(pathname, st->st_bf);
-    else{
-        if ( (fd=fs_open(pathname, pathname, 0))==-1)
-            return -1;
-        r = fs_fstat(fd, st->st_ibuffer);
-        fclose(fd);
-        return r;
-    }
-}
-
-static int is_dir(status* st, int check)
-{
-    if (check)
-        return S_ISDIR(st->st_bf.st_mode);
-    else return st->st_ibuffer.mode&1
-}
-
-static int sh_chdir(const char* pathname, int check)
-{
-    if ( check )
-        return chdir(pathname);
-    else return fs_chdir(pathname);
-}
-
-static int is_local(const char* f)
-{
-    static const char* local = "local:";
-    while (*f && *local && *f==*local ){f++; local++;}
-    return *local==0;
-}
-
-static void copy(const char* dst, const src, int d_local, int s_local)
-{
-    status st_dst, st_src;
-    if ( shell_stat(src, st_src)==-1 )
-    {
-        printf("Error occured.\n");
-        return;
-    }
-    if ( shell_stat(dst, st_dst)!=-1 )
-    {
-        
-    }
+    FILE* fp_src, len;
+    inode ibuffer;
+    int fd2;
     
-    if ( isdir(st, s_local) )
-    {
-        
-    }
+    if ( len!=2 ) { help("get"); return; }
+
+    if ( st_stat(params[1], &ibuffer )==-1 || ibuffer.imode&1==0 ) return;
+    
+    FILE* fp_src =fopen(params[0], "rb");
+    if ( fp_src==NULL ) return;
+
+    newp = (char*)malloc(1000);
+    get_new_path(newp, parmas[0], params[1]);
+
+    if ( sh_stat(newp, &ibuffer)!=-1 ) goto error;
+    if ( (fd2=fs_open(newp, FS_READ|FS_WRITE))==-1 ) goto error;
+
+    char* buf = (char*)malloc(1000);
+    while ( len=fread(buf, 1, 1000, fp) )
+        fs_write(fs, fd2, buf, len);
+
+    free(buf);
+    fs_close(fd2);
+error:
+    fclose(fp_src);
+    free(newp);
 }
 
-void scp(char* params[], int len)
+void put(char* params[], int len)
 {
-    int dst_ck, src_ck;
-    if ( len != 2 ) help("scp");
-    else {
-        dst_ck = is_local(params[0]);
-        src_ck = is_local(params[1]);
-        if ( dst_ck==1 ) params[0]+=6;
-        if ( src_ck==1 ) params[1]+=6;
+    FILE* fp_dst, len;
+    inode ibuffer;
+    int fd;
+    if ( len!=2 ) { help("put"); return; }
 
-        
-        copy(params[0], params[1], dst_ck, src_ck);
-    }
+    if ( st_stat(params[0], &ibuffer )==-1 || ibuffer.imode&1 ) return;
+    
+    if ( (fd=fs_open(fs, params[0], FS_READ))==-1 ) return;
+    
+    newp = (char*)malloc(1000);
+    get_new_path(newp, parmas[0], params[1]);
+
+    if ( ( fp_dst=fopen(newp, "wb") )==-1 ) goto error;
+
+    char* buf = (char*)malloc(1000);
+    while ( len=fs_read(fs, fd, buf, 1000) )
+        fwrite(buf, 1, len, fp);
+
+    free(buf);
+    fclose(fp_dst);
+error:
+    fs_close(fd);
+    free(newp);
 }
 
-const char* commands={"ls", "cd", "pwd", "mkdir", "rm", "scp"};
+const char* commands[]={"ls", "cd", "pwd", "mkdir", "rm", "cp", "get", "put", NULL};
+
+typedef void function(char* p[], int l);
+function func[]={ls, cd, pwd, mkdir, rm, cp, get, put};
 
 fs* create_file_system(fs* f, int argc, char** argv)
 {
@@ -260,32 +278,36 @@ int split_cmdline(char* options[], char* line)
     return current;
 }
 
-void exec_cmd(char* options[], int len)
-{
-    
-}
-
 void parse_cmd(char* line)
 {
     static char* options[50];
     
     int n_len = split_cmdline(options, cmdline);
-    exec_cmd(options, n_len);
+    int i;
+    for (i=0; commands[i]; i++){
+        if ( strcmp(commands[i], options[0])==0 )
+            func[i](options+1, n_len - 1);
+    }
+    printf("sbsh:command not found.\n");
 }
 
 void main_loop()
 {
-    printf("Welcome to mini file system.\n");
+    static char cmdline[1000];
+    
+    printf("Welcome to shabby shell.\n");
     while ( 1 )
     {
-        printf("$");
+        printf("%s $", workdir);
         if (gets(cmdline)==NULL)
             goto error;
+        if ( strcmp(cmdline, "exit")==0 )
+            break;
         parse_cmd(cmdline);
     }
 
 error:
-    
+    fs_closefs(filesys);
 }
 
 int main(int argc, char** argv)
