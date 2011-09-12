@@ -190,7 +190,38 @@ static int writei(fs *f, int ip, int off, const void* ptr, int size){
 }
 
 static int readi(fs *f, int ip, int off, void* ptr, int size){
-	return 0;
+	if (size < 0) return -1;
+	inode *inode = &f->inodes[ip];
+	if (size > inode->size - off) size = inode->size - off;
+	if (!size) return 0;
+
+	int ret = size;
+	char* dst = ptr;
+	if (off % blocksz){
+		buffer* bp = openblk(f, bmap(f, ip, off/blocksz));
+		int t = blocksz - off % blocksz;
+		if (t > size) t = size;
+		memcpy(dst, bp->d+off % blocksz, t);
+		size -= t;
+		dst += t;
+		off += t;
+	}
+
+	while (size >= blocksz){
+		buffer* bp = openblk(f, bmap(f, ip, off/blocksz));
+		memcpy(dst, bp->d, blocksz);
+
+		off += blocksz;
+		dst += blocksz;
+		size -= blocksz;
+	}
+
+	if (size){
+		buffer* bp = openblk(f, bmap(f, ip, off/blocksz));
+		memcpy(dst, bp->d, size);
+	}
+
+	return ret;
 }
 
 static void add_entry(fs * f, int to, const char* str, int id) {
